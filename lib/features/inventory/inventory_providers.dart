@@ -33,6 +33,10 @@ class InventoryNotifier extends AutoDisposeAsyncNotifier<InventoryState> {
   @override
   Future<InventoryState> build() async {
     ref.watch(serverProfileProvider);
+    // Settled before the first fetch, not alongside it: a probe answering
+    // "Spoolman" after a native fetch had already returned would put an empty
+    // inventory on screen and swap it out a moment later.
+    await ref.watch(inventoryBackendProbeProvider.future);
     ref.watch(inventoryBackendProvider);
     return _load();
   }

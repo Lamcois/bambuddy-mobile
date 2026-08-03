@@ -10,8 +10,36 @@ import '../core/models/json_utils.dart';
 import '../core/models/spool_label.dart';
 
 /// Filament inventory backend. User has native, but app should also work on Spoolman —
-/// selected via setting (see `inventoryBackendProvider`).
+/// detected from the server, overridable by setting (see `inventoryBackendProvider`).
 enum InventoryBackend { native, spoolman }
+
+/// Which backend the server keeps its spools in, read from `/spoolman/status`.
+///
+/// A server in Spoolman mode leaves its own `/inventory/spools` table empty, and
+/// an empty table is indistinguishable from an empty inventory — the app showed
+/// no spools while the web UI, which asks this same question before choosing an
+/// endpoint, showed all of them (issue #5).
+///
+/// Never throws: a server predating the route 404s, a key without
+/// `filaments:read` 403s, and the demo backend answers with a list. All three
+/// mean the native backend, which is also what a server with the integration
+/// switched off answers.
+Future<InventoryBackend> probeInventoryBackend(Dio dio) async {
+  try {
+    final res = await dio.get<Map<String, dynamic>>(Endpoints.spoolmanStatus);
+    final data = res.data ?? const {};
+    // `connected` is deliberately not required: an enabled-but-unreachable
+    // Spoolman must surface as an error from the endpoint that owns the data,
+    // not as a silent fallback to a table that is empty by design.
+    final enabled = data['enabled'] == true || data['enabled'] == 'true';
+    final url = toStringOrNull(data['url']);
+    return enabled && url != null
+        ? InventoryBackend.spoolman
+        : InventoryBackend.native;
+  } on Object {
+    return InventoryBackend.native;
+  }
+}
 
 /// Common interface for inventory data source — UI and providers don't know which
 /// backend is running (swappable pattern like `BackgroundMonitor`). Each implementation
@@ -300,16 +328,29 @@ class SpoolmanInventorySource implements SpoolInventorySource {
     return parseJsonList(body, SpoolAssignment.fromSpoolman);
   }
 
-  // Spoolman manages slot assignments server-side — backend doesn't expose writes here.
-  // User's default backend is native; if someone switches to Spoolman, UI gets a
-  // clear error message instead of silent failure.
   @override
-  Future<void> assignSpool(SpoolAssignmentDraft draft) async =>
-      throw UnsupportedError('Spoolman backend does not support slot assignment');
+  Future<void> assignSpool(SpoolAssignmentDraft draft) => guard(
+        () => _dio.post<dynamic>(
+          Endpoints.spoolmanAssign,
+          data: draft.toSpoolmanJson(),
+        ),
+      );
 
+  /// Unassign is keyed by spool here, not by slot, so the spool sitting in the
+  /// slot has to be looked up first. The list is the same one the inventory
+  /// screen already reads, and it covers external slots (`ams_id` 254/255) —
+  /// the single-slot lookup route caps `ams_id` at 7 and would 422 on those.
   @override
-  Future<void> unassignSpool(int printerId, int amsId, int trayId) async =>
-      throw UnsupportedError('Spoolman backend does not support slot assignment');
+  Future<void> unassignSpool(int printerId, int amsId, int trayId) async {
+    final assignments = await fetchAssignments();
+    final match = assignments.where(
+      (a) => a.printerId == printerId && a.amsId == amsId && a.trayId == trayId,
+    );
+    if (match.isEmpty) return;
+    await guard(
+      () => _dio.delete<dynamic>(Endpoints.spoolmanAssignment(match.first.spoolId)),
+    );
+  }
 
   @override
   Future<List<SpoolUsageEntry>> fetchUsage(int spoolId) async => const [];

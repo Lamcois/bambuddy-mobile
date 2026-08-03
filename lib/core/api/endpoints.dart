@@ -447,6 +447,13 @@ abstract final class Endpoints {
   static const inventoryLabels = '$apiPrefix/inventory/labels';
 
   // Backend Spoolman (drop-in replacement — different data shape).
+
+  /// Spoolman integration state (`{enabled, connected, url}`). Says which of the
+  /// two backends holds the user's spools — a server in Spoolman mode keeps its
+  /// own `/inventory/spools` table empty, which reads as "no spools" rather than
+  /// as an error. Older servers 404 here; that degrades to the native backend.
+  static const spoolmanStatus = '$apiPrefix/spoolman/status';
+
   static const spoolmanSpools = '$apiPrefix/spoolman/inventory/spools';
   static const spoolmanSpoolsBulk =
       '$apiPrefix/spoolman/inventory/spools/bulk';
@@ -456,10 +463,24 @@ abstract final class Endpoints {
       '$apiPrefix/spoolman/inventory/spools/$spoolId/archive';
   static String spoolmanSpoolRestore(int spoolId) =>
       '$apiPrefix/spoolman/inventory/spools/$spoolId/restore';
+
+  /// Spoolman counterpart of [inventorySpoolResetUsage] — note the different
+  /// name: this backend calls it the consumed counter, and `/reset-usage` is a
+  /// native-only route that 404s here.
   static String spoolmanSpoolResetUsage(int spoolId) =>
-      '$apiPrefix/spoolman/inventory/spools/$spoolId/reset-usage';
+      '$apiPrefix/spoolman/inventory/spools/$spoolId/reset-consumed-counter';
+
   static const spoolmanAssignments =
       '$apiPrefix/spoolman/inventory/slot-assignments/all';
+
+  /// Assign a Spoolman spool to a slot (`POST`, body `{spoolman_spool_id,
+  /// printer_id, ams_id, tray_id}`). Unlike the native route, the unassign
+  /// counterpart is keyed by spool, not by slot — see [spoolmanAssignment].
+  static const spoolmanAssign = '$apiPrefix/spoolman/inventory/slot-assignments';
+
+  /// Unassign (`DELETE`) by Spoolman spool id.
+  static String spoolmanAssignment(int spoolId) =>
+      '$apiPrefix/spoolman/inventory/slot-assignments/$spoolId';
 
   /// Spoolman counterpart of [inventoryLabels]. Note the path is NOT under
   /// `/spoolman/inventory/` — the label routes live at `/spoolman/labels`.

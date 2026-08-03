@@ -472,8 +472,21 @@ final makerworldRecentImportsProvider =
   (ref) => ref.watch(makerworldRepositoryProvider).recentImports(),
 );
 
-/// Chosen filament inventory backend (native by default). User toggle;
-/// Spoolman is drop-in — see [SpoolInventorySource].
+/// Which backend the *server* keeps its spools in. Asked once per profile,
+/// because the answer is a deployment choice that does not change while the app
+/// runs. Never fails — see [probeInventoryBackend].
+final inventoryBackendProbeProvider = FutureProvider<InventoryBackend>(
+  (ref) => probeInventoryBackend(ref.watch(apiClientProvider).dio),
+);
+
+/// Filament inventory backend in effect. The server's answer decides it; the
+/// stored setting is an override for the case where the probe cannot be trusted
+/// (no `filaments:read` on the key, say). Spoolman is drop-in — see
+/// [SpoolInventorySource].
+///
+/// Until the probe answers this reads native, which is what the vast majority of
+/// servers run. Callers that must not fetch from the wrong backend await
+/// [inventoryBackendProbeProvider] first rather than acting on that placeholder.
 final inventoryBackendProvider =
     NotifierProvider<InventoryBackendNotifier, InventoryBackend>(
   InventoryBackendNotifier.new,
@@ -482,11 +495,12 @@ final inventoryBackendProvider =
 class InventoryBackendNotifier extends Notifier<InventoryBackend> {
   @override
   InventoryBackend build() {
-    final raw = ref.watch(settingsRepositoryProvider).loadInventoryBackend();
-    return InventoryBackend.values.firstWhere(
-      (b) => b.name == raw,
-      orElse: () => InventoryBackend.native,
-    );
+    final pinned = ref.watch(settingsRepositoryProvider).loadInventoryBackend();
+    for (final backend in InventoryBackend.values) {
+      if (backend.name == pinned) return backend;
+    }
+    return ref.watch(inventoryBackendProbeProvider).valueOrNull ??
+        InventoryBackend.native;
   }
 
   Future<void> set(InventoryBackend backend) async {

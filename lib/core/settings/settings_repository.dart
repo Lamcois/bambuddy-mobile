@@ -111,10 +111,11 @@ class SettingsRepository {
   Future<void> setMaintenanceDirty(bool dirty) =>
       dirty ? _prefs.setBool(_maintDirtyKey, true) : _prefs.remove(_maintDirtyKey);
 
-  /// Filament inventory backend: `native` (default) or `spoolman`. Stored as enum name;
-  /// unknown/corrupted → native.
-  String loadInventoryBackend() =>
-      _prefs.getString(_inventoryBackendKey) ?? 'native';
+  /// Filament inventory backend the user pinned by hand: `native` or `spoolman`,
+  /// stored as enum name. Null — the normal case — means nothing was pinned and
+  /// the backend is detected from the server, so an unknown or corrupted value
+  /// reads as "not pinned" rather than forcing one of the two.
+  String? loadInventoryBackend() => _prefs.getString(_inventoryBackendKey);
 
   Future<void> saveInventoryBackend(String backend) =>
       _prefs.setString(_inventoryBackendKey, backend);

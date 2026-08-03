@@ -1219,7 +1219,8 @@ class _AssignSlotSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final inv = ref.watch(inventoryProvider).valueOrNull;
+    final async = ref.watch(inventoryProvider);
+    final inv = async.valueOrNull;
     final spools = inv?.spools ?? const <Spool>[];
 
     Spool? current;
@@ -1289,10 +1290,45 @@ class _AssignSlotSheet extends ConsumerWidget {
             ],
             Text(l10n.inventoryAssignPick, style: theme.textTheme.labelLarge),
             const SizedBox(height: 4),
-            if (options.isEmpty)
+            // Three ways to have no rows, and the sheet used to draw all of them
+            // as "no spools": still loading, the fetch failed, or the inventory
+            // really is empty. A user tapping a list that has not arrived yet
+            // gets no feedback at all — the report behind issue #5 is twelve
+            // taps into a sheet in exactly that state.
+            if (inv == null && async.isLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (inv == null && async.hasError)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(l10n.inventoryEmpty, style: theme.textTheme.bodyMedium),
+                child: AsyncErrorView(
+                  message: async.error is AppApiException
+                      ? (async.error! as AppApiException).localized(l10n)
+                      : l10n.connectFailed,
+                  onRetry: () =>
+                      ref.read(inventoryProvider.notifier).refresh(),
+                  retryLabel: l10n.retry,
+                  icon: null,
+                  tonal: true,
+                ),
+              )
+            else if (options.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: AsyncErrorView(
+                  message: l10n.inventoryEmpty,
+                  // An inventory that loaded empty is not an error, but it is
+                  // the state a stale fetch also ends in — one that nothing on
+                  // this screen would ever refetch, since the dashboard holds
+                  // the provider alive for as long as the app runs.
+                  onRetry: () =>
+                      ref.read(inventoryProvider.notifier).refresh(),
+                  retryLabel: l10n.retry,
+                  icon: null,
+                  tonal: true,
+                ),
               )
             else
               for (final s in options)

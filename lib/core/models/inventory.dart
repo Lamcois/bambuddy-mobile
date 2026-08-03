@@ -73,8 +73,12 @@ class Spool {
         kProfiles: parseJsonList(json['k_profiles'], SpoolKProfile.fromJson),
       );
 
-  /// Spoolman returns loose object (passthrough) — field names vary, so read
-  /// tolerantly from several possible keys.
+  /// Spool from `GET /spoolman/inventory/spools`.
+  ///
+  /// bambuddy normalizes Spoolman's own shape into the native one before it
+  /// reaches the app, so the native keys are read first and are the ones that
+  /// actually arrive. The Spoolman-side names stay as fallbacks: they cost
+  /// nothing and cover a server that passes a raw record through.
   factory Spool.fromSpoolman(Map<String, dynamic> json) {
     final filament = json['filament'];
     final fil = filament is Map<String, dynamic> ? filament : const {};
@@ -87,20 +91,32 @@ class Spool {
       subtype: toStringOrNull(json['subtype']),
       colorName: toStringOrNull(json['color_name']) ?? toStringOrNull(fil['name']),
       rgba: toStringOrNull(json['rgba']) ?? toStringOrNull(fil['color_hex']),
+      extraColors: toStringOrNull(json['extra_colors']),
+      effectType: toStringOrNull(json['effect_type']),
       brand: toStringOrNull(json['brand']) ?? toStringOrNull((fil['vendor'] as Map?)?['name']),
       labelWeight: toIntOrNull(json['label_weight']) ??
           toIntOrNull(json['initial_weight']) ??
           toIntOrNull(fil['weight']) ??
           0,
       weightUsed: toDoubleOrNull(json['weight_used']) ?? toDoubleOrNull(json['used_weight']) ?? 0,
+      coreWeight: toIntOrNull(json['core_weight']) ??
+          toIntOrNull(json['spool_weight']) ??
+          toIntOrNull(fil['spool_weight']) ??
+          250,
+      lastScaleWeight: toIntOrNull(json['last_scale_weight']),
       costPerKg: toDoubleOrNull(json['cost_per_kg']) ?? toDoubleOrNull(fil['price']),
       lowStockThresholdPct: toIntOrNull(json['low_stock_threshold_pct']),
       storageLocation: toStringOrNull(json['storage_location']) ?? toStringOrNull(json['location']),
       category: toStringOrNull(json['category']),
       note: toStringOrNull(json['note']) ?? toStringOrNull(json['comment']),
+      nozzleTempMin: toIntOrNull(json['nozzle_temp_min']),
+      nozzleTempMax: toIntOrNull(json['nozzle_temp_max']),
       tagUid: toStringOrNull(json['tag_uid']),
       archivedAt: toStringOrNull(json['archived_at']) ?? toStringOrNull(json['archived']),
       lastUsed: toStringOrNull(json['last_used']),
+      slicerFilament: toStringOrNull(json['slicer_filament']),
+      slicerFilamentName: toStringOrNull(json['slicer_filament_name']),
+      kProfiles: parseJsonList(json['k_profiles'], SpoolKProfile.fromJson),
     );
   }
 
@@ -390,6 +406,15 @@ class SpoolAssignmentDraft {
 
   Map<String, dynamic> toNativeJson() => {
         'spool_id': spoolId,
+        'printer_id': printerId,
+        'ams_id': amsId,
+        'tray_id': trayId,
+      };
+
+  /// Same slot, different name for the spool: on Spoolman the id belongs to a
+  /// Spoolman spool, so the field says so.
+  Map<String, dynamic> toSpoolmanJson() => {
+        'spoolman_spool_id': spoolId,
         'printer_id': printerId,
         'ams_id': amsId,
         'tray_id': trayId,
